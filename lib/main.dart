@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import 'screens/login_screen.dart';
 import 'screens/translator_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/gallery_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/database_helper.dart';
+import 'services/mysql_models.dart';
 
 void main() {
   runZonedGuarded(() async {
@@ -46,6 +48,10 @@ class FamilyApp extends StatefulWidget {
 class _FamilyAppState extends State<FamilyApp> {
   bool _isInitialized = false;
   String? _initError;
+  ThemeMode _themeMode = ThemeMode.light;
+  bool _isLoggedIn = false;
+  String? _activeAccountId;
+  MysqlConnectionConfig? _mysqlConfig;
 
   @override
   void initState() {
@@ -62,6 +68,15 @@ class _FamilyAppState extends State<FamilyApp> {
       } else {
         print('[FamilyApp] 웹 환경 - 데이터베이스 연결 확인 생략');
       }
+
+      final themeSetting = await DatabaseHelper().getSetting('theme_mode');
+      if (themeSetting == 'dark') {
+        _themeMode = ThemeMode.dark;
+      } else if (themeSetting == 'light') {
+        _themeMode = ThemeMode.light;
+      }
+
+      _mysqlConfig = await DatabaseHelper().getMysqlConfig();
 
       if (mounted) {
         setState(() {
@@ -99,12 +114,49 @@ class _FamilyAppState extends State<FamilyApp> {
         ),
         useMaterial3: true,
       ),
+      themeMode: _themeMode,
       home: _isInitialized
           ? (_initError != null
               ? _ErrorScreen(error: _initError!)
-              : const MainMenuScreen())
+              : _isLoggedIn
+                  ? MainMenuScreen(
+                      themeMode: _themeMode,
+                      onThemeModeChanged: _updateThemeMode,
+                      onLogout: _handleLogout,
+                      currentAccountId: _activeAccountId ?? '알 수 없음',
+                      mysqlConfig: _mysqlConfig,
+                    )
+                  : LoginScreen(
+                      themeMode: _themeMode,
+                      onThemeModeChanged: _updateThemeMode,
+                      initialConfig: _mysqlConfig,
+                      onLoginCompleted: _handleLoginSuccess,
+                    ))
           : const _LoadingScreen(),
     );
+  }
+
+  Future<void> _updateThemeMode(ThemeMode mode) async {
+    setState(() {
+      _themeMode = mode;
+    });
+    await DatabaseHelper()
+        .saveSetting('theme_mode', mode == ThemeMode.dark ? 'dark' : 'light');
+  }
+
+  void _handleLoginSuccess(MysqlConnectionConfig config, String accountId) {
+    setState(() {
+      _mysqlConfig = config;
+      _activeAccountId = accountId;
+      _isLoggedIn = true;
+    });
+  }
+
+  void _handleLogout() {
+    setState(() {
+      _isLoggedIn = false;
+      _activeAccountId = null;
+    });
   }
 }
 
@@ -320,18 +372,31 @@ class MenuItem {
   final String title;
   final IconData icon;
   final Color color;
-  final Widget screen;
+  final WidgetBuilder builder;
 
   MenuItem({
     required this.title,
     required this.icon,
     required this.color,
-    required this.screen,
+    required this.builder,
   });
 }
 
 class MainMenuScreen extends StatelessWidget {
-  const MainMenuScreen({super.key});
+  const MainMenuScreen({
+    super.key,
+    required this.themeMode,
+    required this.onThemeModeChanged,
+    required this.onLogout,
+    required this.currentAccountId,
+    this.mysqlConfig,
+  });
+
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
+  final VoidCallback onLogout;
+  final String currentAccountId;
+  final MysqlConnectionConfig? mysqlConfig;
 
   @override
   Widget build(BuildContext context) {
@@ -340,25 +405,31 @@ class MainMenuScreen extends StatelessWidget {
         title: '번역기',
         icon: Icons.translate,
         color: Colors.blue,
-        screen: const TranslatorScreen(),
+        builder: (context) => const TranslatorScreen(),
       ),
       MenuItem(
         title: '채팅',
         icon: Icons.chat,
         color: Colors.green,
-        screen: const ChatScreen(),
+        builder: (context) => const ChatScreen(),
       ),
       MenuItem(
         title: '갤러리',
         icon: Icons.photo_library,
         color: Colors.orange,
-        screen: const GalleryScreen(),
+        builder: (context) => const GalleryScreen(),
       ),
       MenuItem(
         title: '설정',
         icon: Icons.settings,
         color: Colors.purple,
-        screen: const SettingsScreen(),
+        builder: (context) => SettingsScreen(
+          themeMode: themeMode,
+          onThemeModeChanged: onThemeModeChanged,
+          onLogout: onLogout,
+          currentAccountId: currentAccountId,
+          mysqlConfig: mysqlConfig,
+        ),
       ),
     ];
 
@@ -414,8 +485,39 @@ class MainMenuScreen extends StatelessWidget {
                   Text(
                     '우리 가족을 위한 모든 것',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer
+                              .withOpacity(0.8),
                         ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceTint
+                          .withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.person, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          '현재 계정: $currentAccountId',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -439,7 +541,7 @@ class MainMenuScreen extends StatelessWidget {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => item.screen),
+                          MaterialPageRoute(builder: item.builder),
                         );
                       },
                     );

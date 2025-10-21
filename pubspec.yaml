@@ -41,6 +41,8 @@ dependencies:
   http: ^1.1.0
   shared_preferences: ^2.2.2
   universal_io: ^2.2.2
+  mysql1: ^0.20.0
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:
