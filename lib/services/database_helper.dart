@@ -17,6 +17,34 @@ class DatabaseHelper {
 
   DatabaseHelper._internal();
 
+  /// Safely check if running on desktop platform
+  static bool _isDesktopPlatform() {
+    try {
+      // Try to check platform, but catch any unsupported operation errors
+      return Platform.isLinux || Platform.isWindows || Platform.isMacOS;
+    } catch (e) {
+      print('[DatabaseHelper] Platform check failed: $e');
+      // If platform check fails, assume desktop and use FFI
+      // This is safe because mobile platforms won't fail the check
+      return true;
+    }
+  }
+
+  /// Get platform name for logging
+  static String _getPlatformName() {
+    try {
+      if (Platform.isLinux) return 'Linux';
+      if (Platform.isWindows) return 'Windows';
+      if (Platform.isMacOS) return 'macOS';
+      if (Platform.isAndroid) return 'Android';
+      if (Platform.isIOS) return 'iOS';
+      return 'Unknown';
+    } catch (e) {
+      print('[DatabaseHelper] Platform name check failed: $e');
+      return 'Desktop (fallback)';
+    }
+  }
+
   /// Initialize database factory for desktop platforms
   static void initialize() {
     if (_initialized) {
@@ -27,14 +55,12 @@ class DatabaseHelper {
     print('[DatabaseHelper] Initializing database factory...');
 
     try {
-      // Initialize sqflite_common_ffi for desktop platforms
-      if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
-        String platformName = 'Desktop';
-        if (Platform.isLinux) platformName = 'Linux';
-        if (Platform.isWindows) platformName = 'Windows';
-        if (Platform.isMacOS) platformName = 'macOS';
+      final platformName = _getPlatformName();
+      print('[DatabaseHelper] Platform detected: $platformName');
 
-        print('[DatabaseHelper] Desktop platform detected: $platformName');
+      // Initialize sqflite_common_ffi for desktop platforms
+      if (_isDesktopPlatform()) {
+        print('[DatabaseHelper] Desktop platform - initializing sqflite_common_ffi');
 
         // Initialize FFI
         sqfliteFfiInit();
@@ -44,7 +70,7 @@ class DatabaseHelper {
 
         print('[DatabaseHelper] sqflite_common_ffi initialized successfully');
       } else {
-        print('[DatabaseHelper] Mobile platform detected, using default sqflite');
+        print('[DatabaseHelper] Mobile platform - using default sqflite');
       }
 
       _initialized = true;
@@ -66,7 +92,7 @@ class DatabaseHelper {
   /// Get database path based on platform
   Future<String> _getDatabasePath() async {
     try {
-      if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+      if (_isDesktopPlatform()) {
         // For desktop platforms, use application documents directory
         final directory = await getApplicationDocumentsDirectory();
         final dbDirectory = Directory(join(directory.path, 'familyapp'));
