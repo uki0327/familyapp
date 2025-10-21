@@ -61,6 +61,7 @@ class _FamilyAppState extends State<FamilyApp> {
 
   Future<void> _initialize() async {
     try {
+      _initError = null;
       // Test database initialization by getting an instance
       if (!kIsWeb) {
         await DatabaseHelper().database;
@@ -96,6 +97,15 @@ class _FamilyAppState extends State<FamilyApp> {
     }
   }
 
+  Future<void> _retryInitialization() async {
+    setState(() {
+      _isInitialized = false;
+      _initError = null;
+    });
+
+    await _initialize();
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -117,7 +127,10 @@ class _FamilyAppState extends State<FamilyApp> {
       themeMode: _themeMode,
       home: _isInitialized
           ? (_initError != null
-              ? _ErrorScreen(error: _initError!)
+              ? _ErrorScreen(
+                  error: _initError!,
+                  onRetry: _retryInitialization,
+                )
               : _isLoggedIn
                   ? MainMenuScreen(
                       themeMode: _themeMode,
@@ -229,8 +242,9 @@ class _LoadingScreen extends StatelessWidget {
 
 class _ErrorScreen extends StatefulWidget {
   final String error;
+  final Future<void> Function() onRetry;
 
-  const _ErrorScreen({required this.error});
+  const _ErrorScreen({required this.error, required this.onRetry});
 
   @override
   State<_ErrorScreen> createState() => _ErrorScreenState();
@@ -256,21 +270,11 @@ class _ErrorScreenState extends State<_ErrorScreen> {
       }
 
       print('[ErrorScreen] 데이터베이스 재초기화 성공');
-
-      if (mounted) {
-        // Navigate to main screen
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MainMenuScreen()),
-        );
-      }
+      await widget.onRetry();
     } catch (e) {
       print('[ErrorScreen] 재초기화 실패: $e');
 
       if (mounted) {
-        setState(() {
-          _isRetrying = false;
-        });
-
         // Show error dialog
         showDialog(
           context: context,
@@ -285,6 +289,12 @@ class _ErrorScreenState extends State<_ErrorScreen> {
             ],
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRetrying = false;
+        });
       }
     }
   }
