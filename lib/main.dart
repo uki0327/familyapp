@@ -1,5 +1,8 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+
 import 'screens/translator_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/gallery_screen.dart';
@@ -53,8 +56,12 @@ class _FamilyAppState extends State<FamilyApp> {
   Future<void> _initialize() async {
     try {
       // Test database initialization by getting an instance
-      await DatabaseHelper().database;
-      print('[FamilyApp] 데이터베이스 연결 확인 완료');
+      if (!kIsWeb) {
+        await DatabaseHelper().database;
+        print('[FamilyApp] 데이터베이스 연결 확인 완료');
+      } else {
+        print('[FamilyApp] 웹 환경 - 데이터베이스 연결 확인 생략');
+      }
 
       if (mounted) {
         setState(() {
@@ -181,10 +188,12 @@ class _ErrorScreenState extends State<_ErrorScreen> {
       print('[ErrorScreen] 데이터베이스 재초기화 시도');
 
       // Reset the database instance
-      DatabaseHelper.resetDatabase();
+      await DatabaseHelper.resetDatabase();
 
       // Try to initialize database again
-      await DatabaseHelper().database;
+      if (!kIsWeb) {
+        await DatabaseHelper().database;
+      }
 
       print('[ErrorScreen] 데이터베이스 재초기화 성공');
 
