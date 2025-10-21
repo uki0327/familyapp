@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'screens/translator_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/gallery_screen.dart';
@@ -6,16 +7,72 @@ import 'screens/settings_screen.dart';
 import 'services/database_helper.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize database for desktop platforms
-  DatabaseHelper.initialize();
+    // Set up error handling
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      print('Flutter Error: ${details.exception}');
+      print('Stack trace: ${details.stack}');
+    };
 
-  runApp(const FamilyApp());
+    try {
+      // Initialize database for desktop platforms
+      DatabaseHelper.initialize();
+      print('[Main] 데이터베이스 초기화 완료');
+    } catch (e, stackTrace) {
+      print('[Main] 초기화 에러: $e');
+      print('[Main] 스택 트레이스: $stackTrace');
+    }
+
+    runApp(const FamilyApp());
+  }, (error, stack) {
+    print('[Main] Zone Error: $error');
+    print('[Main] Stack trace: $stack');
+  });
 }
 
-class FamilyApp extends StatelessWidget {
+class FamilyApp extends StatefulWidget {
   const FamilyApp({super.key});
+
+  @override
+  State<FamilyApp> createState() => _FamilyAppState();
+}
+
+class _FamilyAppState extends State<FamilyApp> {
+  bool _isInitialized = false;
+  String? _initError;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      // Test database initialization by getting an instance
+      await DatabaseHelper().database;
+      print('[FamilyApp] 데이터베이스 연결 확인 완료');
+
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
+        });
+      }
+    } catch (e, stackTrace) {
+      print('[FamilyApp] 초기화 에러: $e');
+      print('[FamilyApp] 스택 트레이스: $stackTrace');
+
+      if (mounted) {
+        setState(() {
+          _initError = e.toString();
+          _isInitialized = true; // Show error screen instead of loading
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +92,156 @@ class FamilyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const MainMenuScreen(),
+      home: _isInitialized
+          ? (_initError != null
+              ? _ErrorScreen(error: _initError!)
+              : const MainMenuScreen())
+          : const _LoadingScreen(),
+    );
+  }
+}
+
+class _LoadingScreen extends StatelessWidget {
+  const _LoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.blue.shade50,
+              Colors.blue.shade100,
+            ],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.family_restroom,
+                  size: 80,
+                  color: Colors.blue,
+                ),
+              ),
+              const SizedBox(height: 32),
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              const Text(
+                '앱 초기화 중...',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorScreen extends StatelessWidget {
+  final String error;
+
+  const _ErrorScreen({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.red.shade50,
+              Colors.red.shade100,
+            ],
+          ),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 80,
+                  color: Colors.red,
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  '앱 초기화 실패',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    error,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    // Restart the app
+                    print('[ErrorScreen] 앱 재시작 요청');
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('다시 시도'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
