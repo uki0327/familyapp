@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/openai_service.dart';
 import 'settings_screen.dart';
 
@@ -31,11 +34,76 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<TranslationMessage> _messages = [];
   bool _isTranslating = false;
+  OverlayEntry? _toastEntry;
+  Timer? _toastTimer;
+
+  void _showToast(String message) {
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+
+    if (!mounted) {
+      return;
+    }
+
+    final overlay = Overlay.of(context);
+    if (overlay == null) {
+      return;
+    }
+
+    final entry = OverlayEntry(
+      builder: (context) => Positioned(
+        bottom: 100,
+        left: 0,
+        right: 0,
+        child: Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(entry);
+    _toastEntry = entry;
+    _toastTimer = Timer(const Duration(seconds: 2), () {
+      _toastEntry?.remove();
+      _toastEntry = null;
+    });
+  }
+
+  Future<void> _copyText(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    _showToast('번역 결과가 복사되었어요');
+  }
+
+  Future<void> _copyLatestTranslation() async {
+    if (_messages.isEmpty) {
+      return;
+    }
+
+    await _copyText(_messages.last.translatedText);
+  }
 
   @override
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
     super.dispose();
   }
 
@@ -204,6 +272,22 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.copy),
+                      tooltip: '번역 결과 복사',
+                      onPressed:
+                          _messages.isEmpty ? null : () => _copyLatestTranslation(),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.surface,
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                        disabledBackgroundColor:
+                            Theme.of(context).colorScheme.surfaceVariant,
+                        disabledForegroundColor:
+                            Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
+                        padding: const EdgeInsets.all(12),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     _isTranslating
                         ? const Padding(
                             padding: EdgeInsets.all(12.0),
@@ -295,43 +379,48 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                      bottomLeft: Radius.circular(4),
-                      bottomRight: Radius.circular(20),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _copyText(message.translatedText),
+                  onLongPress: () => _copyText(message.translatedText),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                        bottomLeft: Radius.circular(4),
+                        bottomRight: Radius.circular(20),
+                      ),
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.arrow_downward,
-                            size: 14,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            message.targetLanguage == 'Korean' ? '한국어' : 'ລາວ',
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        message.translatedText,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                    ],
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.arrow_downward,
+                              size: 14,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              message.targetLanguage == 'Korean' ? '한국어' : 'ລາວ',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          message.translatedText,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
