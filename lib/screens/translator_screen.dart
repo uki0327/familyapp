@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/database_helper.dart';
 import '../services/openai_service.dart';
 import 'settings_screen.dart';
 
@@ -30,13 +31,25 @@ class TranslatorScreen extends StatefulWidget {
 
 class _TranslatorScreenState extends State<TranslatorScreen> {
   final OpenAIService _openAIService = OpenAIService();
+  final DatabaseHelper _databaseHelper = DatabaseHelper();
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<TranslationMessage> _messages = [];
   bool _isTranslating = false;
+  bool _isHistoryLoading = false;
+  bool _isLoadingMoreHistory = false;
+  bool _hasMoreHistory = true;
+
+  static const int _historyPageSize = 50;
 
   OverlayEntry? _toastEntry;
   Timer? _toastTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialHistory();
+  }
 
   void _hideToast() {
     _toastTimer?.cancel();
@@ -104,6 +117,98 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
     super.dispose();
   }
 
+  TranslationMessage _mapHistoryRecord(Map<String, dynamic> record) {
+    return TranslationMessage(
+      originalText: record['source_text'] as String? ?? '',
+      translatedText: record['translated_text'] as String? ?? '',
+      sourceLanguage: record['source_language'] as String? ?? 'Korean',
+      targetLanguage: record['target_language'] as String? ?? 'Lao',
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+        (record['timestamp'] as num?)?.toInt() ?? 0,
+      ),
+    );
+  }
+
+  Future<void> _loadInitialHistory() async {
+    setState(() {
+      _isHistoryLoading = true;
+    });
+
+    try {
+      final history = await _databaseHelper.getTranslationHistory(
+        limit: _historyPageSize,
+      );
+
+      if (!mounted) return;
+
+      final messages = history.map(_mapHistoryRecord).toList()
+        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(messages);
+        _hasMoreHistory = history.length == _historyPageSize;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isHistoryLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadMoreHistory() async {
+    if (_isLoadingMoreHistory || !_hasMoreHistory) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingMoreHistory = true;
+    });
+
+    try {
+      final history = await _databaseHelper.getTranslationHistory(
+        limit: _historyPageSize,
+        offset: _messages.length,
+      );
+
+      if (!mounted) return;
+
+      if (history.isEmpty) {
+        setState(() {
+          _hasMoreHistory = false;
+        });
+        return;
+      }
+
+      final messages = history.map(_mapHistoryRecord).toList()
+        ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      setState(() {
+        _messages.insertAll(0, messages);
+        _hasMoreHistory = history.length == _historyPageSize;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingMoreHistory = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleHistoryRefresh() async {
+    if (!_hasMoreHistory) {
+      // Give the refresh indicator some time to animate even when nothing loads
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      return;
+    }
+
+    await _loadMoreHistory();
+  }
+
   Future<void> _translate() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
@@ -134,6 +239,7 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
             timestamp: DateTime.now(),
           ),
         );
+        _hasMoreHistory = true;
       });
 
       _textController.clear();
@@ -296,6 +402,111 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
     );
   }
 
+  Widget _buildHistoryHeader() {
+    if (_isHistoryLoading && _messages.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    if (_messages.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Column(
+          children: [
+            Icon(
+              Icons.translate,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '아직 번역 기록이 없어요',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '번역을 시작하면 여기에 기록이 표시돼요',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                  ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_isLoadingMoreHistory) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              '과거 내역 불러오는 중...',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (!_hasMoreHistory) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          '불러올 더 많은 번역 기록이 없어요',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+              ),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(
+        children: [
+          Icon(
+            Icons.history,
+            size: 20,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '과거 내역 더 보기',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '아래로 당겨서 과거 번역 기록을 불러와요',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
+                ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -318,12 +529,26 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
         children: [
           // 번역 결과 표시 영역 (채팅창 스타일)
           Expanded(
-            child: ListView.separated(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              itemBuilder: (context, index) => _buildMessageItem(_messages[index]),
-              separatorBuilder: (_, __) => const SizedBox(height: 4),
-              itemCount: _messages.length,
+            child: RefreshIndicator(
+              onRefresh: _handleHistoryRefresh,
+              edgeOffset: 12,
+              displacement: 56,
+              child: ListView.separated(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return _buildHistoryHeader();
+                  }
+                  final message = _messages[index - 1];
+                  return _buildMessageItem(message);
+                },
+                separatorBuilder: (_, __) => const SizedBox(height: 4),
+                itemCount: _messages.length + 1,
+              ),
             ),
           ),
           // 입력 영역
