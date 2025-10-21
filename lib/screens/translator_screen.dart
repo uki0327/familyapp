@@ -88,17 +88,17 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
     _toastTimer = Timer(const Duration(seconds: 2), _hideToast);
   }
 
-  Future<void> _copyText(String text) async {
+  Future<void> _copyTranslatedText(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     _showToast('번역 결과가 복사되었어요');
   }
 
-  Future<void> _copyLatestTranslation() async {
+  Future<void> _copyMostRecentTranslation() async {
     if (_messages.isEmpty) {
       return;
     }
 
-    await _copyText(_messages.last.translatedText);
+    await _copyTranslatedText(_messages.last.translatedText);
   }
 
   @override
@@ -278,7 +278,7 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
                       icon: const Icon(Icons.copy),
                       tooltip: '번역 결과 복사',
                       onPressed:
-                          _messages.isEmpty ? null : () => _copyLatestTranslation(),
+                          _messages.isEmpty ? null : () => _copyMostRecentTranslation(),
                       style: IconButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.surface,
                         foregroundColor: Theme.of(context).colorScheme.primary,
@@ -383,8 +383,8 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
               Flexible(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () => _copyText(message.translatedText),
-                  onLongPress: () => _copyText(message.translatedText),
+                  onTap: () => _copyTranslatedText(message.translatedText),
+                  onLongPress: () => _copyTranslatedText(message.translatedText),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
