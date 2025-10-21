@@ -1,15 +1,33 @@
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   static Database? _database;
+  static bool _initialized = false;
 
   factory DatabaseHelper() {
     return _instance;
   }
 
   DatabaseHelper._internal();
+
+  /// Initialize database factory for desktop platforms
+  static void initialize() {
+    if (_initialized) return;
+
+    // Initialize sqflite_common_ffi for desktop platforms
+    if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+      // Initialize FFI
+      sqfliteFfiInit();
+      // Change the default factory to use FFI
+      databaseFactory = databaseFactoryFfi;
+    }
+
+    _initialized = true;
+  }
 
   Future<Database> get database async {
     if (_database != null) return _database!;
