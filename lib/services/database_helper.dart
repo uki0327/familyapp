@@ -44,6 +44,69 @@ class DatabaseHelper {
     }
   }
 
+  /// Safely get environment variable
+  static String? _getEnv(String key) {
+    try {
+      return Platform.environment[key];
+    } catch (e) {
+      print('[DatabaseHelper] Environment access failed for $key: $e');
+      return null;
+    }
+  }
+
+  /// Get a safe fallback directory path
+  static String _getSafeFallbackPath() {
+    print('[DatabaseHelper] Getting safe fallback path...');
+
+    // Try environment variables based on platform
+    try {
+      if (Platform.isLinux || Platform.isMacOS) {
+        final home = _getEnv('HOME');
+        if (home != null && home.isNotEmpty) {
+          print('[DatabaseHelper] Using HOME: $home');
+          return join(home, '.familyapp');
+        }
+      }
+
+      if (Platform.isWindows) {
+        final userProfile = _getEnv('USERPROFILE');
+        if (userProfile != null && userProfile.isNotEmpty) {
+          print('[DatabaseHelper] Using USERPROFILE: $userProfile');
+          return join(userProfile, '.familyapp');
+        }
+
+        final appData = _getEnv('APPDATA');
+        if (appData != null && appData.isNotEmpty) {
+          print('[DatabaseHelper] Using APPDATA: $appData');
+          return join(appData, 'familyapp');
+        }
+      }
+    } catch (e) {
+      print('[DatabaseHelper] Platform environment check failed: $e');
+    }
+
+    // Last resort: use /tmp or temp directory
+    try {
+      if (Platform.isLinux || Platform.isMacOS) {
+        final tmpPath = join('/tmp', 'familyapp');
+        print('[DatabaseHelper] Using /tmp fallback: $tmpPath');
+        return tmpPath;
+      }
+
+      if (Platform.isWindows) {
+        final tmpPath = join('C:', 'Temp', 'familyapp');
+        print('[DatabaseHelper] Using C:\\Temp fallback: $tmpPath');
+        return tmpPath;
+      }
+    } catch (e) {
+      print('[DatabaseHelper] Temp directory fallback failed: $e');
+    }
+
+    // Absolute last resort: relative path
+    print('[DatabaseHelper] Using relative path fallback');
+    return '.familyapp_data';
+  }
+
   /// Initialize database factory for desktop platforms
   static void initialize() {
     if (_initialized) {
@@ -90,10 +153,13 @@ class DatabaseHelper {
 
   /// Get database path based on platform
   Future<String> _getDatabasePath() async {
+    print('[DatabaseHelper] === Getting database path ===');
+
+    // Strategy 1: Use getDatabasesPath() from sqflite
     try {
-      // For both mobile and desktop, use getDatabasesPath()
-      // sqflite_common_ffi handles desktop paths automatically after initialization
+      print('[DatabaseHelper] Strategy 1: Using getDatabasesPath()');
       final databasesPath = await getDatabasesPath();
+      print('[DatabaseHelper] getDatabasesPath() returned: $databasesPath');
 
       // Create a subdirectory for our app
       final dbDirectory = Directory(join(databasesPath, 'familyapp'));
@@ -105,35 +171,47 @@ class DatabaseHelper {
       }
 
       final path = join(dbDirectory.path, _databaseName);
-      print('[DatabaseHelper] Database path: $path');
+      print('[DatabaseHelper] Database path (strategy 1): $path');
       return path;
     } catch (e, stackTrace) {
-      print('[DatabaseHelper] Error getting database path: $e');
+      print('[DatabaseHelper] !!! Strategy 1 failed !!!');
+      print('[DatabaseHelper] Error: $e');
       print('[DatabaseHelper] Stack trace: $stackTrace');
-
-      // Fallback: use current directory with .db folder
-      try {
-        print('[DatabaseHelper] Using fallback path in current directory');
-        final currentDir = Directory.current.path;
-        final fallbackDir = Directory(join(currentDir, '.familyapp_db'));
-
-        if (!await fallbackDir.exists()) {
-          await fallbackDir.create(recursive: true);
-          print('[DatabaseHelper] Created fallback directory: ${fallbackDir.path}');
-        }
-
-        final fallbackPath = join(fallbackDir.path, _databaseName);
-        print('[DatabaseHelper] Fallback database path: $fallbackPath');
-        return fallbackPath;
-      } catch (fallbackError) {
-        print('[DatabaseHelper] Fallback path creation failed: $fallbackError');
-        rethrow;
-      }
     }
+
+    // Strategy 2: Use safe fallback path
+    try {
+      print('[DatabaseHelper] Strategy 2: Using safe fallback path');
+      final fallbackBasePath = _getSafeFallbackPath();
+      final fallbackDir = Directory(fallbackBasePath);
+
+      if (!await fallbackDir.exists()) {
+        await fallbackDir.create(recursive: true);
+        print('[DatabaseHelper] Created fallback directory: ${fallbackDir.path}');
+      }
+
+      final fallbackPath = join(fallbackDir.path, _databaseName);
+      print('[DatabaseHelper] Database path (strategy 2): $fallbackPath');
+      return fallbackPath;
+    } catch (e, stackTrace) {
+      print('[DatabaseHelper] !!! Strategy 2 failed !!!');
+      print('[DatabaseHelper] Error: $e');
+      print('[DatabaseHelper] Stack trace: $stackTrace');
+    }
+
+    // Strategy 3: Absolute last resort - in-memory database
+    print('[DatabaseHelper] Strategy 3: Using in-memory database (LAST RESORT)');
+    return ':memory:';
   }
 
   /// Delete database and all related files
   Future<void> _deleteDatabaseFiles(String path) async {
+    // Don't delete in-memory database
+    if (path == ':memory:') {
+      print('[DatabaseHelper] Skipping deletion for in-memory database');
+      return;
+    }
+
     try {
       print('[DatabaseHelper] Deleting database files at: $path');
 
