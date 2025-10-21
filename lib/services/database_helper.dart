@@ -54,59 +54,6 @@ class DatabaseHelper {
     }
   }
 
-  /// Get a safe fallback directory path
-  static String _getSafeFallbackPath() {
-    print('[DatabaseHelper] Getting safe fallback path...');
-
-    // Try environment variables based on platform
-    try {
-      if (Platform.isLinux || Platform.isMacOS) {
-        final home = _getEnv('HOME');
-        if (home != null && home.isNotEmpty) {
-          print('[DatabaseHelper] Using HOME: $home');
-          return join(home, '.familyapp');
-        }
-      }
-
-      if (Platform.isWindows) {
-        final userProfile = _getEnv('USERPROFILE');
-        if (userProfile != null && userProfile.isNotEmpty) {
-          print('[DatabaseHelper] Using USERPROFILE: $userProfile');
-          return join(userProfile, '.familyapp');
-        }
-
-        final appData = _getEnv('APPDATA');
-        if (appData != null && appData.isNotEmpty) {
-          print('[DatabaseHelper] Using APPDATA: $appData');
-          return join(appData, 'familyapp');
-        }
-      }
-    } catch (e) {
-      print('[DatabaseHelper] Platform environment check failed: $e');
-    }
-
-    // Last resort: use /tmp or temp directory
-    try {
-      if (Platform.isLinux || Platform.isMacOS) {
-        final tmpPath = join('/tmp', 'familyapp');
-        print('[DatabaseHelper] Using /tmp fallback: $tmpPath');
-        return tmpPath;
-      }
-
-      if (Platform.isWindows) {
-        final tmpPath = join('C:', 'Temp', 'familyapp');
-        print('[DatabaseHelper] Using C:\\Temp fallback: $tmpPath');
-        return tmpPath;
-      }
-    } catch (e) {
-      print('[DatabaseHelper] Temp directory fallback failed: $e');
-    }
-
-    // Absolute last resort: relative path
-    print('[DatabaseHelper] Using relative path fallback');
-    return '.familyapp_data';
-  }
-
   /// Initialize database factory for desktop platforms
   static void initialize() {
     if (_initialized) {
@@ -155,53 +102,106 @@ class DatabaseHelper {
   Future<String> _getDatabasePath() async {
     print('[DatabaseHelper] === Getting database path ===');
 
-    // Strategy 1: Use getDatabasesPath() from sqflite
+    // For desktop platforms, use environment-based paths directly
+    // to avoid getDatabasesPath() which requires databaseFactory
+    if (_isDesktopPlatform()) {
+      print('[DatabaseHelper] Desktop platform - using environment-based path');
+      return _getDesktopDatabasePath();
+    }
+
+    // For mobile platforms, use standard getDatabasesPath()
     try {
-      print('[DatabaseHelper] Strategy 1: Using getDatabasesPath()');
+      print('[DatabaseHelper] Mobile platform - using getDatabasesPath()');
       final databasesPath = await getDatabasesPath();
       print('[DatabaseHelper] getDatabasesPath() returned: $databasesPath');
 
-      // Create a subdirectory for our app
-      final dbDirectory = Directory(join(databasesPath, 'familyapp'));
-
-      // Create directory if it doesn't exist
-      if (!await dbDirectory.exists()) {
-        await dbDirectory.create(recursive: true);
-        print('[DatabaseHelper] Created database directory: ${dbDirectory.path}');
-      }
-
-      final path = join(dbDirectory.path, _databaseName);
-      print('[DatabaseHelper] Database path (strategy 1): $path');
+      final path = join(databasesPath, _databaseName);
+      print('[DatabaseHelper] Database path: $path');
       return path;
     } catch (e, stackTrace) {
-      print('[DatabaseHelper] !!! Strategy 1 failed !!!');
+      print('[DatabaseHelper] !!! getDatabasesPath() failed !!!');
       print('[DatabaseHelper] Error: $e');
       print('[DatabaseHelper] Stack trace: $stackTrace');
+      // Fallback to in-memory
+      print('[DatabaseHelper] Using in-memory database as fallback');
+      return ':memory:';
     }
+  }
 
-    // Strategy 2: Use safe fallback path
+  /// Get database path for desktop platforms using environment variables
+  String _getDesktopDatabasePath() {
+    print('[DatabaseHelper] Getting desktop database path...');
+
+    // Strategy 1: Use standard application data directories
     try {
-      print('[DatabaseHelper] Strategy 2: Using safe fallback path');
-      final fallbackBasePath = _getSafeFallbackPath();
-      final fallbackDir = Directory(fallbackBasePath);
+      if (Platform.isLinux) {
+        // Linux: Try XDG_DATA_HOME or HOME/.local/share
+        final xdgDataHome = _getEnv('XDG_DATA_HOME');
+        if (xdgDataHome != null && xdgDataHome.isNotEmpty) {
+          final path = join(xdgDataHome, 'familyapp', _databaseName);
+          print('[DatabaseHelper] Using XDG_DATA_HOME: $path');
+          return path;
+        }
 
-      if (!await fallbackDir.exists()) {
-        await fallbackDir.create(recursive: true);
-        print('[DatabaseHelper] Created fallback directory: ${fallbackDir.path}');
+        final home = _getEnv('HOME');
+        if (home != null && home.isNotEmpty) {
+          final path = join(home, '.local', 'share', 'familyapp', _databaseName);
+          print('[DatabaseHelper] Using HOME/.local/share: $path');
+          return path;
+        }
       }
 
-      final fallbackPath = join(fallbackDir.path, _databaseName);
-      print('[DatabaseHelper] Database path (strategy 2): $fallbackPath');
-      return fallbackPath;
-    } catch (e, stackTrace) {
-      print('[DatabaseHelper] !!! Strategy 2 failed !!!');
-      print('[DatabaseHelper] Error: $e');
-      print('[DatabaseHelper] Stack trace: $stackTrace');
+      if (Platform.isMacOS) {
+        // macOS: Use HOME/Library/Application Support
+        final home = _getEnv('HOME');
+        if (home != null && home.isNotEmpty) {
+          final path = join(home, 'Library', 'Application Support', 'familyapp', _databaseName);
+          print('[DatabaseHelper] Using macOS Application Support: $path');
+          return path;
+        }
+      }
+
+      if (Platform.isWindows) {
+        // Windows: Try APPDATA or LOCALAPPDATA
+        final appData = _getEnv('LOCALAPPDATA') ?? _getEnv('APPDATA');
+        if (appData != null && appData.isNotEmpty) {
+          final path = join(appData, 'familyapp', _databaseName);
+          print('[DatabaseHelper] Using Windows AppData: $path');
+          return path;
+        }
+
+        final userProfile = _getEnv('USERPROFILE');
+        if (userProfile != null && userProfile.isNotEmpty) {
+          final path = join(userProfile, '.familyapp', _databaseName);
+          print('[DatabaseHelper] Using Windows UserProfile: $path');
+          return path;
+        }
+      }
+    } catch (e) {
+      print('[DatabaseHelper] Platform-specific path failed: $e');
     }
 
-    // Strategy 3: Absolute last resort - in-memory database
-    print('[DatabaseHelper] Strategy 3: Using in-memory database (LAST RESORT)');
-    return ':memory:';
+    // Strategy 2: Use temp directory
+    try {
+      String tempPath;
+      if (Platform.isWindows) {
+        final temp = _getEnv('TEMP') ?? _getEnv('TMP');
+        tempPath = temp ?? join('C:', 'Temp');
+      } else {
+        tempPath = '/tmp';
+      }
+
+      final path = join(tempPath, 'familyapp', _databaseName);
+      print('[DatabaseHelper] Using temp directory: $path');
+      return path;
+    } catch (e) {
+      print('[DatabaseHelper] Temp directory path failed: $e');
+    }
+
+    // Strategy 3: Last resort - relative path
+    final path = join('.familyapp_data', _databaseName);
+    print('[DatabaseHelper] Using relative path (last resort): $path');
+    return path;
   }
 
   /// Delete database and all related files
@@ -269,6 +269,17 @@ class DatabaseHelper {
       final path = await _getDatabasePath();
       print('[DatabaseHelper] Opening database at: $path');
 
+      // Ensure directory exists (except for in-memory database)
+      if (path != ':memory:') {
+        final dbFile = File(path);
+        final dbDir = dbFile.parent;
+
+        if (!await dbDir.exists()) {
+          await dbDir.create(recursive: true);
+          print('[DatabaseHelper] Created directory: ${dbDir.path}');
+        }
+      }
+
       // Try to open the database
       final db = await openDatabase(
         path,
@@ -299,6 +310,17 @@ class DatabaseHelper {
 
         // Wait a bit to ensure files are deleted
         await Future.delayed(const Duration(milliseconds: 100));
+
+        // Ensure directory exists (except for in-memory database)
+        if (path != ':memory:') {
+          final dbFile = File(path);
+          final dbDir = dbFile.parent;
+
+          if (!await dbDir.exists()) {
+            await dbDir.create(recursive: true);
+            print('[DatabaseHelper] Created directory for recovery: ${dbDir.path}');
+          }
+        }
 
         // Retry opening database (will trigger onCreate)
         print('[DatabaseHelper] Recreating database...');
