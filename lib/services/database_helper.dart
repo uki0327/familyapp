@@ -1,7 +1,12 @@
-import 'dart:io';
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:path/path.dart';
+import 'package:universal_io/io.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -9,6 +14,9 @@ class DatabaseHelper {
   static bool _initialized = false;
   static const int _databaseVersion = 1;
   static const String _databaseName = 'familyapp.db';
+  static const String _webSettingsKey = 'familyapp_web_settings';
+  static const String _webHistoryKey = 'familyapp_web_history';
+  static const int _webHistoryMaxItems = 200;
 
   factory DatabaseHelper() {
     return _instance;
@@ -19,19 +27,22 @@ class DatabaseHelper {
   /// Safely check if running on desktop platform
   static bool _isDesktopPlatform() {
     try {
+      if (kIsWeb) {
+        return false;
+      }
       // Try to check platform, but catch any unsupported operation errors
       return Platform.isLinux || Platform.isWindows || Platform.isMacOS;
     } catch (e) {
       print('[DatabaseHelper] Platform check failed: $e');
-      // If platform check fails, assume desktop and use FFI
-      // This is safe because mobile platforms won't fail the check
-      return true;
+      // If platform check fails, fall back to non-desktop configuration
+      return false;
     }
   }
 
   /// Get platform name for logging
   static String _getPlatformName() {
     try {
+      if (kIsWeb) return 'Web';
       if (Platform.isLinux) return 'Linux';
       if (Platform.isWindows) return 'Windows';
       if (Platform.isMacOS) return 'macOS';
@@ -47,6 +58,9 @@ class DatabaseHelper {
   /// Safely get environment variable
   static String? _getEnv(String key) {
     try {
+      if (kIsWeb) {
+        return null;
+      }
       return Platform.environment[key];
     } catch (e) {
       print('[DatabaseHelper] Environment access failed for $key: $e');
@@ -67,8 +81,12 @@ class DatabaseHelper {
       final platformName = _getPlatformName();
       print('[DatabaseHelper] Platform detected: $platformName');
 
-      // Initialize sqflite_common_ffi for desktop platforms
-      if (_isDesktopPlatform()) {
+      // Initialize sqflite factories based on the platform
+      if (kIsWeb) {
+        print('[DatabaseHelper] Web platform - configuring web storage');
+        databaseFactory = databaseFactoryFfiWeb;
+        print('[DatabaseHelper] Web storage configured');
+      } else if (_isDesktopPlatform()) {
         print('[DatabaseHelper] Desktop platform - initializing sqflite_common_ffi');
 
         // Initialize FFI
@@ -92,15 +110,29 @@ class DatabaseHelper {
   }
 
   /// Reset database instance (useful for retry scenarios)
-  static void resetDatabase() {
+  static Future<void> resetDatabase() async {
     print('[DatabaseHelper] Resetting database instance');
-    _database?.close();
+
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_webSettingsKey);
+      await prefs.remove(_webHistoryKey);
+      print('[DatabaseHelper] Cleared web storage data');
+      return;
+    }
+
+    await _database?.close();
     _database = null;
   }
 
   /// Get database path based on platform
   Future<String> _getDatabasePath() async {
     print('[DatabaseHelper] === Getting database path ===');
+
+    if (kIsWeb) {
+      print('[DatabaseHelper] Web platform - using browser storage path');
+      return _databaseName;
+    }
 
     // For desktop platforms, use environment-based paths directly
     // to avoid getDatabasesPath() which requires databaseFactory
@@ -207,8 +239,8 @@ class DatabaseHelper {
   /// Delete database and all related files
   Future<void> _deleteDatabaseFiles(String path) async {
     // Don't delete in-memory database
-    if (path == ':memory:') {
-      print('[DatabaseHelper] Skipping deletion for in-memory database');
+    if (kIsWeb || path == ':memory:') {
+      print('[DatabaseHelper] Skipping deletion for in-memory or web database');
       return;
     }
 
@@ -250,6 +282,10 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     // Ensure database factory is initialized before accessing database
+    if (kIsWeb) {
+      throw UnsupportedError('Direct SQLite access is not supported on web.');
+    }
+
     initialize();
 
     if (_database != null) {
@@ -270,7 +306,7 @@ class DatabaseHelper {
       print('[DatabaseHelper] Opening database at: $path');
 
       // Ensure directory exists (except for in-memory database)
-      if (path != ':memory:') {
+      if (!kIsWeb && path != ':memory:') {
         final dbFile = File(path);
         final dbDir = dbFile.parent;
 
@@ -281,14 +317,16 @@ class DatabaseHelper {
       }
 
       // Try to open the database
-      final db = await openDatabase(
+      final db = await databaseFactory.openDatabase(
         path,
-        version: _databaseVersion,
-        onCreate: _onCreate,
-        onUpgrade: _onUpgrade,
-        onOpen: (db) async {
-          print('[DatabaseHelper] Database opened successfully');
-        },
+        options: OpenDatabaseOptions(
+          version: _databaseVersion,
+          onCreate: _onCreate,
+          onUpgrade: _onUpgrade,
+          onOpen: (db) async {
+            print('[DatabaseHelper] Database opened successfully');
+          },
+        ),
       );
 
       // Verify database integrity
@@ -312,7 +350,7 @@ class DatabaseHelper {
         await Future.delayed(const Duration(milliseconds: 100));
 
         // Ensure directory exists (except for in-memory database)
-        if (path != ':memory:') {
+        if (!kIsWeb && path != ':memory:') {
           final dbFile = File(path);
           final dbDir = dbFile.parent;
 
@@ -324,14 +362,16 @@ class DatabaseHelper {
 
         // Retry opening database (will trigger onCreate)
         print('[DatabaseHelper] Recreating database...');
-        final db = await openDatabase(
+        final db = await databaseFactory.openDatabase(
           path,
-          version: _databaseVersion,
-          onCreate: _onCreate,
-          onUpgrade: _onUpgrade,
-          onOpen: (db) async {
-            print('[DatabaseHelper] Database recreated and opened successfully');
-          },
+          options: OpenDatabaseOptions(
+            version: _databaseVersion,
+            onCreate: _onCreate,
+            onUpgrade: _onUpgrade,
+            onOpen: (db) async {
+              print('[DatabaseHelper] Database recreated and opened successfully');
+            },
+          ),
         );
 
         // Verify the newly created database
@@ -447,6 +487,19 @@ class DatabaseHelper {
   Future<void> saveSetting(String key, String value) async {
     try {
       print('[DatabaseHelper] Saving setting - key: $key, value length: ${value.length}');
+
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(_webSettingsKey);
+        final Map<String, dynamic> settings = raw != null
+            ? Map<String, dynamic>.from(jsonDecode(raw) as Map<String, dynamic>)
+            : <String, dynamic>{};
+        settings[key] = value;
+        await prefs.setString(_webSettingsKey, jsonEncode(settings));
+        print('[DatabaseHelper] Setting saved to web storage');
+        return;
+      }
+
       final db = await database;
 
       final result = await db.insert(
@@ -480,6 +533,24 @@ class DatabaseHelper {
   Future<String?> getSetting(String key) async {
     try {
       print('[DatabaseHelper] Getting setting - key: $key');
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(_webSettingsKey);
+        if (raw == null) {
+          print('[DatabaseHelper] Web storage empty');
+          return null;
+        }
+        final settings =
+            Map<String, dynamic>.from(jsonDecode(raw) as Map<String, dynamic>);
+        final value = settings[key] as String?;
+        if (value != null) {
+          print('[DatabaseHelper] Setting found in web storage - value length: ${value.length}');
+        } else {
+          print('[DatabaseHelper] Setting not found in web storage - key: $key');
+        }
+        return value;
+      }
+
       final db = await database;
 
       final result = await db.query(
@@ -513,6 +584,29 @@ class DatabaseHelper {
   }) async {
     try {
       print('[DatabaseHelper] Saving translation to history');
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(_webHistoryKey);
+        final List<Map<String, dynamic>> history = raw != null
+            ? (jsonDecode(raw) as List)
+                .map((item) => Map<String, dynamic>.from(item as Map<String, dynamic>))
+                .toList()
+            : <Map<String, dynamic>>[];
+        history.insert(0, {
+          'source_text': sourceText,
+          'translated_text': translatedText,
+          'source_language': sourceLanguage,
+          'target_language': targetLanguage,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        });
+        if (history.length > _webHistoryMaxItems) {
+          history.removeRange(_webHistoryMaxItems, history.length);
+        }
+        await prefs.setString(_webHistoryKey, jsonEncode(history));
+        print('[DatabaseHelper] Translation saved to web history (total: ${history.length})');
+        return;
+      }
+
       final db = await database;
 
       await db.insert('translation_history', {
@@ -535,6 +629,21 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getTranslationHistory({int limit = 50}) async {
     try {
       print('[DatabaseHelper] Getting translation history (limit: $limit)');
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(_webHistoryKey);
+        if (raw == null) {
+          print('[DatabaseHelper] No translation history in web storage');
+          return [];
+        }
+        final List<Map<String, dynamic>> history = (jsonDecode(raw) as List)
+            .map((item) => Map<String, dynamic>.from(item as Map<String, dynamic>))
+            .toList();
+        final result = history.take(limit).map((item) => Map<String, dynamic>.from(item)).toList();
+        print('[DatabaseHelper] Retrieved ${result.length} translation records from web storage');
+        return result;
+      }
+
       final db = await database;
 
       final result = await db.query(
@@ -555,6 +664,11 @@ class DatabaseHelper {
 
   /// Close database connection
   Future<void> close() async {
+    if (kIsWeb) {
+      print('[DatabaseHelper] Web storage in use - no SQLite connection to close');
+      return;
+    }
+
     if (_database != null) {
       print('[DatabaseHelper] Closing database');
       await _database!.close();
