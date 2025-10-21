@@ -35,6 +35,9 @@ class DatabaseHelper {
   }
 
   Future<Database> get database async {
+    // Ensure database factory is initialized before accessing database
+    initialize();
+
     if (_database != null) return _database!;
     _database = await _initDatabase();
     return _database!;
