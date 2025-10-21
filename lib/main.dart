@@ -3,9 +3,14 @@ import 'screens/translator_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/gallery_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/database_helper.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize database for desktop platforms
+  DatabaseHelper.initialize();
+
   runApp(const FamilyApp());
 }
 
