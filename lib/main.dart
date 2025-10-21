@@ -181,7 +181,7 @@ class _ErrorScreenState extends State<_ErrorScreen> {
       print('[ErrorScreen] 데이터베이스 재초기화 시도');
 
       // Reset the database instance
-      DatabaseHelper._database = null;
+      DatabaseHelper.resetDatabase();
 
       // Try to initialize database again
       await DatabaseHelper().database;

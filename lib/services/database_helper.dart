@@ -29,6 +29,11 @@ class DatabaseHelper {
     _initialized = true;
   }
 
+  /// Reset database instance (useful for retry scenarios)
+  static void resetDatabase() {
+    _database = null;
+  }
+
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDatabase();
