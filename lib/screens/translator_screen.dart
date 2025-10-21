@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/openai_service.dart';
@@ -32,6 +34,69 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<TranslationMessage> _messages = [];
   bool _isTranslating = false;
+  OverlayEntry? _toastEntry;
+  Timer? _toastTimer;
+
+  void _showToast(String message) {
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+
+    if (!mounted) {
+      return;
+    }
+
+    final overlay = Overlay.of(context);
+    if (overlay == null) {
+      return;
+    }
+
+    final entry = OverlayEntry(
+      builder: (context) => Positioned(
+        bottom: 100,
+        left: 0,
+        right: 0,
+        child: Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(entry);
+    _toastEntry = entry;
+    _toastTimer = Timer(const Duration(seconds: 2), () {
+      _toastEntry?.remove();
+      _toastEntry = null;
+    });
+  }
+
+  Future<void> _copyText(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    _showToast('번역 결과가 복사되었어요');
+  }
+
+  Future<void> _copyLatestTranslation() async {
+    if (_messages.isEmpty) {
+      return;
+    }
+
+    await _copyText(_messages.last.translatedText);
+  }
 
   Future<void> _copyText(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
@@ -61,6 +126,8 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
     super.dispose();
   }
 
@@ -337,6 +404,8 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
             children: [
               Flexible(
                 child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _copyText(message.translatedText),
                   onLongPress: () => _copyText(message.translatedText),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
