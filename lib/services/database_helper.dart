@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
@@ -86,6 +87,9 @@ class DatabaseHelper {
         print('[DatabaseHelper] Web platform - configuring web storage');
         databaseFactory = databaseFactoryFfiWeb;
         print('[DatabaseHelper] Web storage configured');
+        print('[DatabaseHelper] Web platform - initializing sqflite_common_ffi_web');
+        databaseFactory = databaseFactoryFfiWeb;
+        print('[DatabaseHelper] sqflite_common_ffi_web initialized successfully');
       } else if (_isDesktopPlatform()) {
         print('[DatabaseHelper] Desktop platform - initializing sqflite_common_ffi');
 
