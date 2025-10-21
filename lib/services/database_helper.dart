@@ -78,7 +78,7 @@ class DatabaseHelper {
       // Initialize sqflite factories based on the platform
       if (kIsWeb) {
         print('[DatabaseHelper] Web platform - initializing sqflite_common_ffi_web');
-        databaseFactory = databaseFactoryFfiWeb();
+        databaseFactory = databaseFactoryFfiWeb;
         print('[DatabaseHelper] sqflite_common_ffi_web initialized successfully');
       } else if (_isDesktopPlatform()) {
         print('[DatabaseHelper] Desktop platform - initializing sqflite_common_ffi');
