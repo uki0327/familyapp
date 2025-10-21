@@ -29,7 +29,12 @@ class DatabaseHelper {
     try {
       // Initialize sqflite_common_ffi for desktop platforms
       if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
-        print('[DatabaseHelper] Desktop platform detected: ${Platform.operatingSystem}');
+        String platformName = 'Desktop';
+        if (Platform.isLinux) platformName = 'Linux';
+        if (Platform.isWindows) platformName = 'Windows';
+        if (Platform.isMacOS) platformName = 'macOS';
+
+        print('[DatabaseHelper] Desktop platform detected: $platformName');
 
         // Initialize FFI
         sqfliteFfiInit();
