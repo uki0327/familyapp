@@ -10,6 +10,7 @@ class LoginScreen extends StatefulWidget {
     required this.themeMode,
     required this.onThemeModeChanged,
     required this.onLoginCompleted,
+    required this.onBypassRequested,
     this.initialConfig,
   });
 
@@ -17,6 +18,7 @@ class LoginScreen extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeModeChanged;
   final void Function(MysqlConnectionConfig config, String accountId)
       onLoginCompleted;
+  final VoidCallback onBypassRequested;
   final MysqlConnectionConfig? initialConfig;
 
   @override
@@ -145,6 +147,21 @@ class _LoginScreenState extends State<LoginScreen> {
               _buildAccountSelectionCard(context),
               const SizedBox(height: 16),
               _buildRecommendationsCard(context),
+              const SizedBox(height: 24),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: widget.onBypassRequested,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    minimumSize: const Size(0, 32),
+                  ),
+                  child: const Text(
+                    '바이패스',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ),
             ],
           ),
         ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/database_helper.dart';
+import '../services/mysql_models.dart';
 import '../services/openai_service.dart';
 import 'settings_screen.dart';
 
@@ -23,7 +24,20 @@ class TranslationMessage {
 }
 
 class TranslatorScreen extends StatefulWidget {
-  const TranslatorScreen({super.key});
+  const TranslatorScreen({
+    super.key,
+    required this.themeMode,
+    required this.onThemeModeChanged,
+    required this.onLogout,
+    required this.currentAccountId,
+    this.mysqlConfig,
+  });
+
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
+  final VoidCallback onLogout;
+  final String currentAccountId;
+  final MysqlConnectionConfig? mysqlConfig;
 
   @override
   State<TranslatorScreen> createState() => _TranslatorScreenState();
@@ -265,7 +279,15 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => SettingsScreen(
+                      themeMode: widget.themeMode,
+                      onThemeModeChanged: widget.onThemeModeChanged,
+                      onLogout: widget.onLogout,
+                      currentAccountId: widget.currentAccountId,
+                      mysqlConfig: widget.mysqlConfig,
+                    ),
+                  ),
                 );
               },
             ),
@@ -519,7 +541,15 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                MaterialPageRoute(
+                  builder: (context) => SettingsScreen(
+                    themeMode: widget.themeMode,
+                    onThemeModeChanged: widget.onThemeModeChanged,
+                    onLogout: widget.onLogout,
+                    currentAccountId: widget.currentAccountId,
+                    mysqlConfig: widget.mysqlConfig,
+                  ),
+                ),
               );
             },
           ),

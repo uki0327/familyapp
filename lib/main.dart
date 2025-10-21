@@ -131,6 +131,7 @@ class _FamilyAppState extends State<FamilyApp> {
                       onThemeModeChanged: _updateThemeMode,
                       initialConfig: _mysqlConfig,
                       onLoginCompleted: _handleLoginSuccess,
+                      onBypassRequested: _handleBypass,
                     ))
           : const _LoadingScreen(),
     );
@@ -156,6 +157,13 @@ class _FamilyAppState extends State<FamilyApp> {
     setState(() {
       _isLoggedIn = false;
       _activeAccountId = null;
+    });
+  }
+
+  void _handleBypass() {
+    setState(() {
+      _isLoggedIn = true;
+      _activeAccountId ??= '바이패스';
     });
   }
 }
@@ -405,7 +413,13 @@ class MainMenuScreen extends StatelessWidget {
         title: '번역기',
         icon: Icons.translate,
         color: Colors.blue,
-        builder: (context) => const TranslatorScreen(),
+        builder: (context) => TranslatorScreen(
+          themeMode: themeMode,
+          onThemeModeChanged: onThemeModeChanged,
+          onLogout: onLogout,
+          currentAccountId: currentAccountId,
+          mysqlConfig: mysqlConfig,
+        ),
       ),
       MenuItem(
         title: '채팅',
@@ -490,6 +504,34 @@ class MainMenuScreen extends StatelessWidget {
                               .onPrimaryContainer
                               .withOpacity(0.8),
                         ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceTint
+                          .withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.person, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          '현재 계정: $currentAccountId',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Container(
