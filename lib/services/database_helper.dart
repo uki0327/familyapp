@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -92,31 +91,44 @@ class DatabaseHelper {
   /// Get database path based on platform
   Future<String> _getDatabasePath() async {
     try {
-      if (_isDesktopPlatform()) {
-        // For desktop platforms, use application documents directory
-        final directory = await getApplicationDocumentsDirectory();
-        final dbDirectory = Directory(join(directory.path, 'familyapp'));
+      // For both mobile and desktop, use getDatabasesPath()
+      // sqflite_common_ffi handles desktop paths automatically after initialization
+      final databasesPath = await getDatabasesPath();
 
-        // Create directory if it doesn't exist
-        if (!await dbDirectory.exists()) {
-          await dbDirectory.create(recursive: true);
-          print('[DatabaseHelper] Created database directory: ${dbDirectory.path}');
-        }
+      // Create a subdirectory for our app
+      final dbDirectory = Directory(join(databasesPath, 'familyapp'));
 
-        final path = join(dbDirectory.path, _databaseName);
-        print('[DatabaseHelper] Database path: $path');
-        return path;
-      } else {
-        // For mobile platforms, use default databases path
-        final databasesPath = await getDatabasesPath();
-        final path = join(databasesPath, _databaseName);
-        print('[DatabaseHelper] Database path: $path');
-        return path;
+      // Create directory if it doesn't exist
+      if (!await dbDirectory.exists()) {
+        await dbDirectory.create(recursive: true);
+        print('[DatabaseHelper] Created database directory: ${dbDirectory.path}');
       }
+
+      final path = join(dbDirectory.path, _databaseName);
+      print('[DatabaseHelper] Database path: $path');
+      return path;
     } catch (e, stackTrace) {
       print('[DatabaseHelper] Error getting database path: $e');
       print('[DatabaseHelper] Stack trace: $stackTrace');
-      rethrow;
+
+      // Fallback: use current directory with .db folder
+      try {
+        print('[DatabaseHelper] Using fallback path in current directory');
+        final currentDir = Directory.current.path;
+        final fallbackDir = Directory(join(currentDir, '.familyapp_db'));
+
+        if (!await fallbackDir.exists()) {
+          await fallbackDir.create(recursive: true);
+          print('[DatabaseHelper] Created fallback directory: ${fallbackDir.path}');
+        }
+
+        final fallbackPath = join(fallbackDir.path, _databaseName);
+        print('[DatabaseHelper] Fallback database path: $fallbackPath');
+        return fallbackPath;
+      } catch (fallbackError) {
+        print('[DatabaseHelper] Fallback path creation failed: $fallbackError');
+        rethrow;
+      }
     }
   }
 
