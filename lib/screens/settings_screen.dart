@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../services/openai_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -13,6 +14,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _apiKeyController = TextEditingController();
   bool _isLoading = true;
   bool _isObscured = true;
+  bool _isSaving = false;
+  Timer? _debounceTimer;
 
   @override
   void initState() {
@@ -21,13 +24,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadApiKey() async {
+    print('[SettingsScreen] _loadApiKey 시작');
     setState(() => _isLoading = true);
     try {
       final apiKey = await _openAIService.getApiKey();
       if (apiKey != null) {
         _apiKeyController.text = apiKey;
+        print('[SettingsScreen] API 키 로드 성공 - 길이: ${apiKey.length}');
+      } else {
+        print('[SettingsScreen] 저장된 API 키 없음');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('[SettingsScreen] _loadApiKey 에러: $e');
+      print('[SettingsScreen] 스택 트레이스: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('API 키 불러오기 실패: $e')),
@@ -39,27 +48,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _saveApiKey(String value) async {
+    if (_isSaving) {
+      print('[SettingsScreen] 이미 저장 중이므로 스킵');
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    print('[SettingsScreen] _saveApiKey 시작 - 값 길이: ${value.length}');
+
     try {
       await _openAIService.saveApiKey(value);
+      print('[SettingsScreen] API 키 저장 성공');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('API 키가 저장되었습니다'),
-            duration: Duration(seconds: 1),
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.green,
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('[SettingsScreen] _saveApiKey 에러: $e');
+      print('[SettingsScreen] 스택 트레이스: $stackTrace');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('API 키 저장 실패: $e')),
+          SnackBar(
+            content: Text('API 키 저장 실패: $e'),
+            duration: const Duration(seconds: 4),
+            backgroundColor: Colors.red,
+          ),
         );
       }
+    } finally {
+      setState(() => _isSaving = false);
     }
+  }
+
+  void _onApiKeyChanged(String value) {
+    // 기존 타이머 취소
+    _debounceTimer?.cancel();
+
+    // 1초 후에 저장 (debounce)
+    _debounceTimer = Timer(const Duration(seconds: 1), () {
+      if (value.isNotEmpty) {
+        _saveApiKey(value);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _apiKeyController.dispose();
     super.dispose();
   }
@@ -107,25 +147,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             hintText: 'sk-...',
                             border: const OutlineInputBorder(),
                             prefixIcon: const Icon(Icons.vpn_key),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _isObscured ? Icons.visibility : Icons.visibility_off,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _isObscured = !_isObscured;
-                                });
-                              },
+                            suffixIcon: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_isSaving)
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 8),
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
+                                  ),
+                                IconButton(
+                                  icon: Icon(
+                                    _isObscured ? Icons.visibility : Icons.visibility_off,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _isObscured = !_isObscured;
+                                    });
+                                  },
+                                ),
+                              ],
                             ),
                           ),
-                          onChanged: (value) {
-                            // 입력 이벤트 후 자동 저장
-                            _saveApiKey(value);
-                          },
+                          onChanged: _onApiKeyChanged,
                         ),
                         const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _isSaving
+                                ? null
+                                : () => _saveApiKey(_apiKeyController.text),
+                            icon: const Icon(Icons.save),
+                            label: const Text('저장'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         Text(
-                          'OpenAI API 키를 입력하면 자동으로 저장됩니다.',
+                          'API 키는 입력 후 1초 뒤 자동 저장되거나, 저장 버튼을 눌러 즉시 저장할 수 있습니다.',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                               ),
