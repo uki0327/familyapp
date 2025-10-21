@@ -9,15 +9,18 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:path/path.dart';
 import 'package:universal_io/io.dart';
 
+import 'mysql_models.dart';
+
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   static Database? _database;
   static bool _initialized = false;
-  static const int _databaseVersion = 1;
+  static const int _databaseVersion = 2;
   static const String _databaseName = 'familyapp.db';
   static const String _webSettingsKey = 'familyapp_web_settings';
   static const String _webHistoryKey = 'familyapp_web_history';
   static const int _webHistoryMaxItems = 200;
+  static const String _webMysqlConfigKey = 'familyapp_web_mysql_config';
 
   factory DatabaseHelper() {
     return _instance;
@@ -417,6 +420,22 @@ class DatabaseHelper {
       ''');
       print('[DatabaseHelper] Translation_history table created');
 
+      // Create MySQL configuration table
+      print('[DatabaseHelper] Creating mysql_configs table...');
+      await db.execute('''
+        CREATE TABLE mysql_configs (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          host TEXT NOT NULL,
+          port INTEGER NOT NULL,
+          database TEXT NOT NULL,
+          username TEXT NOT NULL,
+          password TEXT NOT NULL,
+          schema_verified INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER
+        )
+      ''');
+      print('[DatabaseHelper] mysql_configs table created');
+
       print('[DatabaseHelper] === Schema creation complete ===');
     } catch (e, stackTrace) {
       print('[DatabaseHelper] !!! Schema creation failed !!!');
@@ -430,14 +449,22 @@ class DatabaseHelper {
     print('[DatabaseHelper] === Upgrading database: v$oldVersion -> v$newVersion ===');
 
     try {
-      // Handle schema upgrades here
-      // Example:
-      // if (oldVersion < 2) {
-      //   await db.execute('ALTER TABLE settings ADD COLUMN new_field TEXT');
-      // }
-      // if (oldVersion < 3) {
-      //   await db.execute('CREATE TABLE new_table (...)');
-      // }
+      if (oldVersion < 2) {
+        print('[DatabaseHelper] Adding mysql_configs table for v2');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS mysql_configs (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            host TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            database TEXT NOT NULL,
+            username TEXT NOT NULL,
+            password TEXT NOT NULL,
+            schema_verified INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER
+          )
+        ''');
+        print('[DatabaseHelper] mysql_configs table added');
+      }
 
       print('[DatabaseHelper] === Database upgrade complete ===');
     } catch (e, stackTrace) {
@@ -458,14 +485,16 @@ class DatabaseHelper {
 
       // Check if required tables exist
       final tables = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('settings', 'translation_history')"
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('settings', 'translation_history', 'mysql_configs')",
       );
 
       print('[DatabaseHelper] Found ${tables.length} required tables');
 
-      if (tables.length < 2) {
+      if (tables.length < 3) {
         final foundTables = tables.map((t) => t['name']).toList();
-        throw Exception('Missing required tables. Found: $foundTables, Expected: [settings, translation_history]');
+        throw Exception(
+          'Missing required tables. Found: $foundTables, Expected: [settings, translation_history, mysql_configs]',
+        );
       }
 
       // Verify each table has correct structure
@@ -570,6 +599,87 @@ class DatabaseHelper {
       return null;
     } catch (e, stackTrace) {
       print('[DatabaseHelper] !!! Get setting error !!!');
+      print('[DatabaseHelper] Error: $e');
+      print('[DatabaseHelper] Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  // MySQL configuration methods
+  Future<void> saveMysqlConfig(MysqlConnectionConfig config) async {
+    final data = config.copyWith(updatedAt: DateTime.now()).toMap()
+      ..['id'] = 1;
+
+    try {
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_webMysqlConfigKey, jsonEncode(data));
+        print('[DatabaseHelper] MySQL config saved to web storage');
+        return;
+      }
+
+      final db = await database;
+      await db.insert(
+        'mysql_configs',
+        data,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      print('[DatabaseHelper] MySQL config saved to sqlite');
+    } catch (e, stackTrace) {
+      print('[DatabaseHelper] !!! Save MySQL config error !!!');
+      print('[DatabaseHelper] Error: $e');
+      print('[DatabaseHelper] Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  Future<MysqlConnectionConfig?> getMysqlConfig() async {
+    try {
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(_webMysqlConfigKey);
+        if (raw == null) {
+          return null;
+        }
+        final map = Map<String, Object?>.from(jsonDecode(raw) as Map<String, dynamic>);
+        // jsonDecode returns num for integers, ensure cast
+        map['port'] = (map['port'] as num).toInt();
+        if (map['updated_at'] != null) {
+          map['updated_at'] = (map['updated_at'] as num).toInt();
+        }
+        return MysqlConnectionConfig.fromMap(map);
+      }
+
+      final db = await database;
+      final result = await db.query('mysql_configs', limit: 1);
+      if (result.isEmpty) {
+        return null;
+      }
+
+      final row = Map<String, Object?>.from(result.first);
+      return MysqlConnectionConfig.fromMap(row);
+    } catch (e, stackTrace) {
+      print('[DatabaseHelper] !!! Get MySQL config error !!!');
+      print('[DatabaseHelper] Error: $e');
+      print('[DatabaseHelper] Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  Future<void> clearMysqlConfig() async {
+    try {
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_webMysqlConfigKey);
+        print('[DatabaseHelper] MySQL config cleared from web storage');
+        return;
+      }
+
+      final db = await database;
+      await db.delete('mysql_configs');
+      print('[DatabaseHelper] MySQL config cleared from sqlite');
+    } catch (e, stackTrace) {
+      print('[DatabaseHelper] !!! Clear MySQL config error !!!');
       print('[DatabaseHelper] Error: $e');
       print('[DatabaseHelper] Stack trace: $stackTrace');
       rethrow;
