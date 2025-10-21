@@ -87,9 +87,6 @@ class DatabaseHelper {
         print('[DatabaseHelper] Web platform - configuring web storage');
         databaseFactory = databaseFactoryFfiWeb;
         print('[DatabaseHelper] Web storage configured');
-        print('[DatabaseHelper] Web platform - initializing sqflite_common_ffi_web');
-        databaseFactory = databaseFactoryFfiWeb;
-        print('[DatabaseHelper] sqflite_common_ffi_web initialized successfully');
       } else if (_isDesktopPlatform()) {
         print('[DatabaseHelper] Desktop platform - initializing sqflite_common_ffi');
 
