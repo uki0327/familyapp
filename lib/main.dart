@@ -5,6 +5,7 @@ import 'screens/gallery_screen.dart';
 import 'screens/settings_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const FamilyApp());
 }
 
