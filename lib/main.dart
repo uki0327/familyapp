@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'screens/translator_screen.dart';
+import 'screens/chat_screen.dart';
+import 'screens/gallery_screen.dart';
+import 'screens/settings_screen.dart';
 
 void main() {
   runApp(const FamilyApp());
@@ -25,171 +29,206 @@ class FamilyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const FamilyHomePage(),
+      home: const MainMenuScreen(),
     );
   }
 }
 
-class FamilyMember {
-  final String name;
-  final String role;
-  final String emoji;
+class MenuItem {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final Widget screen;
 
-  FamilyMember({
-    required this.name,
-    required this.role,
-    required this.emoji,
+  MenuItem({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.screen,
   });
 }
 
-class FamilyHomePage extends StatefulWidget {
-  const FamilyHomePage({super.key});
-
-  @override
-  State<FamilyHomePage> createState() => _FamilyHomePageState();
-}
-
-class _FamilyHomePageState extends State<FamilyHomePage> {
-  final List<FamilyMember> _familyMembers = [
-    FamilyMember(name: '아빠', role: '가장', emoji: '👨'),
-    FamilyMember(name: '엄마', role: '주부', emoji: '👩'),
-    FamilyMember(name: '아들', role: '학생', emoji: '👦'),
-    FamilyMember(name: '딸', role: '학생', emoji: '👧'),
-  ];
+class MainMenuScreen extends StatelessWidget {
+  const MainMenuScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('우리 가족'),
-        elevation: 2,
+    final menuItems = [
+      MenuItem(
+        title: '번역기',
+        icon: Icons.translate,
+        color: Colors.blue,
+        screen: const TranslatorScreen(),
       ),
-      body: Column(
-        children: [
-          // 헤더 섹션
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.primaryContainer,
-                  Theme.of(context).colorScheme.secondaryContainer,
+      MenuItem(
+        title: '채팅',
+        icon: Icons.chat,
+        color: Colors.green,
+        screen: const ChatScreen(),
+      ),
+      MenuItem(
+        title: '갤러리',
+        icon: Icons.photo_library,
+        color: Colors.orange,
+        screen: const GalleryScreen(),
+      ),
+      MenuItem(
+        title: '설정',
+        icon: Icons.settings,
+        color: Colors.purple,
+        screen: const SettingsScreen(),
+      ),
+    ];
+
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 로고 및 헤더 섹션
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Theme.of(context).colorScheme.primaryContainer,
+                    Theme.of(context).colorScheme.secondaryContainer,
+                  ],
+                ),
+              ),
+              child: Column(
+                children: [
+                  // 로고 아이콘
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.family_restroom,
+                      size: 80,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Family App',
+                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '우리 가족을 위한 모든 것',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                        ),
+                  ),
                 ],
               ),
             ),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.family_restroom,
-                  size: 64,
-                  color: Theme.of(context).colorScheme.primary,
+            // 메뉴 그리드
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    childAspectRatio: 1.0,
+                  ),
+                  itemCount: menuItems.length,
+                  itemBuilder: (context, index) {
+                    final item = menuItems[index];
+                    return _MenuCard(
+                      item: item,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => item.screen),
+                        );
+                      },
+                    );
+                  },
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'Family App',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '가족 구성원: ${_familyMembers.length}명',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
-                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MenuCard extends StatelessWidget {
+  final MenuItem item;
+  final VoidCallback onTap;
+
+  const _MenuCard({
+    required this.item,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                item.color.withOpacity(0.1),
+                item.color.withOpacity(0.05),
               ],
             ),
           ),
-          // 가족 구성원 리스트
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _familyMembers.length,
-              itemBuilder: (context, index) {
-                final member = _familyMembers[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  elevation: 2,
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                      child: Text(
-                        member.emoji,
-                        style: const TextStyle(fontSize: 28),
-                      ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: item.color.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  item.icon,
+                  size: 48,
+                  color: item.color,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                item.title,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: item.color,
                     ),
-                    title: Text(
-                      member.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                    subtitle: Text(member.role),
-                    trailing: Icon(
-                      Icons.arrow_forward_ios,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    onTap: () {
-                      _showMemberDetail(context, member);
-                    },
-                  ),
-                );
-              },
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          _showAddMemberDialog(context);
-        },
-        icon: const Icon(Icons.person_add),
-        label: const Text('구성원 추가'),
-      ),
-    );
-  }
-
-  void _showMemberDetail(BuildContext context, FamilyMember member) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${member.emoji} ${member.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('이름: ${member.name}', style: const TextStyle(fontSize: 16)),
-            const SizedBox(height: 8),
-            Text('역할: ${member.role}', style: const TextStyle(fontSize: 16)),
-          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('닫기'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddMemberDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('새 구성원 추가'),
-        content: const Text('이 기능은 곧 구현될 예정입니다!'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('확인'),
-          ),
-        ],
       ),
     );
   }
