@@ -627,9 +627,9 @@ class DatabaseHelper {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getTranslationHistory({int limit = 50}) async {
+  Future<List<Map<String, dynamic>>> getTranslationHistory({int limit = 50, int offset = 0}) async {
     try {
-      print('[DatabaseHelper] Getting translation history (limit: $limit)');
+      print('[DatabaseHelper] Getting translation history (limit: $limit, offset: $offset)');
       if (kIsWeb) {
         final prefs = await SharedPreferences.getInstance();
         final raw = prefs.getString(_webHistoryKey);
@@ -640,7 +640,11 @@ class DatabaseHelper {
         final List<Map<String, dynamic>> history = (jsonDecode(raw) as List)
             .map((item) => Map<String, dynamic>.from(item as Map<String, dynamic>))
             .toList();
-        final result = history.take(limit).map((item) => Map<String, dynamic>.from(item)).toList();
+        final result = history
+            .skip(offset)
+            .take(limit)
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
         print('[DatabaseHelper] Retrieved ${result.length} translation records from web storage');
         return result;
       }
@@ -651,6 +655,7 @@ class DatabaseHelper {
         'translation_history',
         orderBy: 'timestamp DESC',
         limit: limit,
+        offset: offset,
       );
 
       print('[DatabaseHelper] Retrieved ${result.length} translation records');
