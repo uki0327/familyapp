@@ -1,7 +1,9 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:path/path.dart';
+import 'package:universal_io/io.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -19,19 +21,22 @@ class DatabaseHelper {
   /// Safely check if running on desktop platform
   static bool _isDesktopPlatform() {
     try {
+      if (kIsWeb) {
+        return false;
+      }
       // Try to check platform, but catch any unsupported operation errors
       return Platform.isLinux || Platform.isWindows || Platform.isMacOS;
     } catch (e) {
       print('[DatabaseHelper] Platform check failed: $e');
-      // If platform check fails, assume desktop and use FFI
-      // This is safe because mobile platforms won't fail the check
-      return true;
+      // If platform check fails, fall back to non-desktop configuration
+      return false;
     }
   }
 
   /// Get platform name for logging
   static String _getPlatformName() {
     try {
+      if (kIsWeb) return 'Web';
       if (Platform.isLinux) return 'Linux';
       if (Platform.isWindows) return 'Windows';
       if (Platform.isMacOS) return 'macOS';
@@ -47,6 +52,9 @@ class DatabaseHelper {
   /// Safely get environment variable
   static String? _getEnv(String key) {
     try {
+      if (kIsWeb) {
+        return null;
+      }
       return Platform.environment[key];
     } catch (e) {
       print('[DatabaseHelper] Environment access failed for $key: $e');
@@ -67,8 +75,12 @@ class DatabaseHelper {
       final platformName = _getPlatformName();
       print('[DatabaseHelper] Platform detected: $platformName');
 
-      // Initialize sqflite_common_ffi for desktop platforms
-      if (_isDesktopPlatform()) {
+      // Initialize sqflite factories based on the platform
+      if (kIsWeb) {
+        print('[DatabaseHelper] Web platform - initializing sqflite_common_ffi_web');
+        databaseFactory = databaseFactoryFfiWeb();
+        print('[DatabaseHelper] sqflite_common_ffi_web initialized successfully');
+      } else if (_isDesktopPlatform()) {
         print('[DatabaseHelper] Desktop platform - initializing sqflite_common_ffi');
 
         // Initialize FFI
@@ -101,6 +113,11 @@ class DatabaseHelper {
   /// Get database path based on platform
   Future<String> _getDatabasePath() async {
     print('[DatabaseHelper] === Getting database path ===');
+
+    if (kIsWeb) {
+      print('[DatabaseHelper] Web platform - using browser storage path');
+      return _databaseName;
+    }
 
     // For desktop platforms, use environment-based paths directly
     // to avoid getDatabasesPath() which requires databaseFactory
@@ -207,8 +224,8 @@ class DatabaseHelper {
   /// Delete database and all related files
   Future<void> _deleteDatabaseFiles(String path) async {
     // Don't delete in-memory database
-    if (path == ':memory:') {
-      print('[DatabaseHelper] Skipping deletion for in-memory database');
+    if (kIsWeb || path == ':memory:') {
+      print('[DatabaseHelper] Skipping deletion for in-memory or web database');
       return;
     }
 
@@ -270,7 +287,7 @@ class DatabaseHelper {
       print('[DatabaseHelper] Opening database at: $path');
 
       // Ensure directory exists (except for in-memory database)
-      if (path != ':memory:') {
+      if (!kIsWeb && path != ':memory:') {
         final dbFile = File(path);
         final dbDir = dbFile.parent;
 
@@ -312,7 +329,7 @@ class DatabaseHelper {
         await Future.delayed(const Duration(milliseconds: 100));
 
         // Ensure directory exists (except for in-memory database)
-        if (path != ':memory:') {
+        if (!kIsWeb && path != ':memory:') {
           final dbFile = File(path);
           final dbDir = dbFile.parent;
 
