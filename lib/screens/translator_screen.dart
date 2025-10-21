@@ -34,72 +34,6 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<TranslationMessage> _messages = [];
   bool _isTranslating = false;
-  OverlayEntry? _toastEntry;
-  Timer? _toastTimer;
-
-  void _hideToast() {
-    _toastTimer?.cancel();
-    _toastTimer = null;
-    _toastEntry?.remove();
-    _toastEntry = null;
-  }
-
-  void _showToast(String message) {
-    _hideToast();
-
-    if (!mounted) {
-      return;
-    }
-
-    final overlay = Overlay.of(context);
-    if (overlay == null) {
-      return;
-    }
-
-    final entry = OverlayEntry(
-      builder: (context) => Positioned(
-        bottom: 100,
-        left: 0,
-        right: 0,
-        child: Center(
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.8),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    _toastEntry = entry;
-    _toastTimer = Timer(const Duration(seconds: 2), _hideToast);
-  }
-
-  Future<void> _copyTranslatedText(String text) async {
-    await Clipboard.setData(ClipboardData(text: text));
-    _showToast('번역 결과가 복사되었어요');
-  }
-
-  Future<void> _copyMostRecentTranslation() async {
-    if (_messages.isEmpty) {
-      return;
-    }
-
-    await _copyTranslatedText(_messages.last.translatedText);
-  }
 
   OverlayEntry? _toastEntry;
   Timer? _toastTimer;
@@ -153,6 +87,7 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
 
   Future<void> _copyTranslatedText(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
     _showToast('번역 결과가 복사되었어요');
   }
 
