@@ -98,6 +98,30 @@ class _TranslatorScreenState extends State<TranslatorScreen> {
     await _copyText(_messages.last.translatedText);
   }
 
+  Future<void> _copyText(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('번역 결과가 복사되었어요.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+  }
+
+  Future<void> _copyLatestTranslation() async {
+    if (_messages.isEmpty) {
+      return;
+    }
+
+    await _copyText(_messages.last.translatedText);
+  }
+
   @override
   void dispose() {
     _textController.dispose();
