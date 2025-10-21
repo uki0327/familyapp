@@ -13,11 +13,43 @@ class OpenAIService {
   OpenAIService._internal();
 
   Future<String?> getApiKey() async {
-    return await _dbHelper.getSetting('openai_api_key');
+    try {
+      print('[OpenAIService] getApiKey 호출');
+      final apiKey = await _dbHelper.getSetting('openai_api_key');
+      print('[OpenAIService] API 키 조회 결과: ${apiKey != null ? "존재함 (길이: ${apiKey.length})" : "없음"}');
+      return apiKey;
+    } catch (e, stackTrace) {
+      print('[OpenAIService] getApiKey 에러: $e');
+      print('[OpenAIService] 스택 트레이스: $stackTrace');
+      rethrow;
+    }
   }
 
   Future<void> saveApiKey(String apiKey) async {
-    await _dbHelper.saveSetting('openai_api_key', apiKey);
+    try {
+      print('[OpenAIService] saveApiKey 호출 - API 키 길이: ${apiKey.length}');
+
+      if (apiKey.trim().isEmpty) {
+        print('[OpenAIService] 빈 API 키는 저장하지 않음');
+        return;
+      }
+
+      await _dbHelper.saveSetting('openai_api_key', apiKey);
+      print('[OpenAIService] API 키 저장 성공');
+
+      // 저장 검증
+      final savedKey = await getApiKey();
+      if (savedKey == apiKey) {
+        print('[OpenAIService] API 키 저장 및 검증 완료');
+      } else {
+        print('[OpenAIService] 경고: 저장된 키가 입력한 키와 다름');
+        throw Exception('API 키 저장 검증 실패');
+      }
+    } catch (e, stackTrace) {
+      print('[OpenAIService] saveApiKey 에러: $e');
+      print('[OpenAIService] 스택 트레이스: $stackTrace');
+      rethrow;
+    }
   }
 
   Future<String> translate({

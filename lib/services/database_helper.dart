@@ -50,26 +50,64 @@ class DatabaseHelper {
 
   // Settings 관련 메서드
   Future<void> saveSetting(String key, String value) async {
-    final db = await database;
-    await db.insert(
-      'settings',
-      {'key': key, 'value': value},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    try {
+      print('[DatabaseHelper] saveSetting 시작 - key: $key, value length: ${value.length}');
+      final db = await database;
+      print('[DatabaseHelper] 데이터베이스 획득 성공');
+
+      final result = await db.insert(
+        'settings',
+        {'key': key, 'value': value},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      print('[DatabaseHelper] 저장 완료 - result: $result');
+
+      // 저장 검증
+      final verification = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: [key],
+      );
+
+      if (verification.isNotEmpty) {
+        print('[DatabaseHelper] 저장 검증 성공 - 저장된 값: ${verification.first['value']}');
+      } else {
+        print('[DatabaseHelper] 저장 검증 실패 - 데이터를 찾을 수 없음');
+        throw Exception('저장 후 데이터 검증 실패');
+      }
+    } catch (e, stackTrace) {
+      print('[DatabaseHelper] saveSetting 에러: $e');
+      print('[DatabaseHelper] 스택 트레이스: $stackTrace');
+      rethrow;
+    }
   }
 
   Future<String?> getSetting(String key) async {
-    final db = await database;
-    final result = await db.query(
-      'settings',
-      where: 'key = ?',
-      whereArgs: [key],
-    );
+    try {
+      print('[DatabaseHelper] getSetting 시작 - key: $key');
+      final db = await database;
+      print('[DatabaseHelper] 데이터베이스 획득 성공');
 
-    if (result.isNotEmpty) {
-      return result.first['value'] as String;
+      final result = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: [key],
+      );
+
+      if (result.isNotEmpty) {
+        final value = result.first['value'] as String;
+        print('[DatabaseHelper] 설정값 조회 성공 - value length: ${value.length}');
+        return value;
+      }
+
+      print('[DatabaseHelper] 설정값 없음 - key: $key');
+      return null;
+    } catch (e, stackTrace) {
+      print('[DatabaseHelper] getSetting 에러: $e');
+      print('[DatabaseHelper] 스택 트레이스: $stackTrace');
+      rethrow;
     }
-    return null;
   }
 
   // Translation History 관련 메서드
