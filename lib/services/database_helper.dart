@@ -39,20 +39,59 @@ class DatabaseHelper {
     final databasesPath = await getDatabasesPath();
     final path = join(databasesPath, 'familyapp.db');
 
-    return await openDatabase(
-      path,
-      version: 1,
-      onCreate: _onCreate,
-    );
+    try {
+      // Try to open the database
+      final db = await openDatabase(
+        path,
+        version: 1,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      );
+
+      // Verify database integrity
+      await _verifyDatabaseIntegrity(db);
+
+      print('[DatabaseHelper] 데이터베이스 초기화 성공: $path');
+      return db;
+    } catch (e) {
+      print('[DatabaseHelper] 데이터베이스 열기 실패: $e');
+      print('[DatabaseHelper] 데이터베이스 파일 삭제 후 재생성 시도');
+
+      // Delete corrupted database file
+      final dbFile = File(path);
+      if (await dbFile.exists()) {
+        await dbFile.delete();
+        print('[DatabaseHelper] 손상된 데이터베이스 파일 삭제 완료');
+      }
+
+      // Retry opening database (will trigger onCreate)
+      try {
+        final db = await openDatabase(
+          path,
+          version: 1,
+          onCreate: _onCreate,
+          onUpgrade: _onUpgrade,
+        );
+
+        print('[DatabaseHelper] 데이터베이스 재생성 성공');
+        return db;
+      } catch (retryError) {
+        print('[DatabaseHelper] 데이터베이스 재생성 실패: $retryError');
+        rethrow;
+      }
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
+    print('[DatabaseHelper] 데이터베이스 테이블 생성 시작');
+
     await db.execute('''
       CREATE TABLE settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       )
     ''');
+    print('[DatabaseHelper] settings 테이블 생성 완료');
 
     await db.execute('''
       CREATE TABLE translation_history (
@@ -64,6 +103,35 @@ class DatabaseHelper {
         timestamp INTEGER NOT NULL
       )
     ''');
+    print('[DatabaseHelper] translation_history 테이블 생성 완료');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    print('[DatabaseHelper] 데이터베이스 업그레이드: $oldVersion -> $newVersion');
+
+    // Future schema changes can be handled here
+    // Example:
+    // if (oldVersion < 2) {
+    //   await db.execute('ALTER TABLE settings ADD COLUMN new_field TEXT');
+    // }
+  }
+
+  Future<void> _verifyDatabaseIntegrity(Database db) async {
+    try {
+      // Check if required tables exist
+      final tables = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND (name='settings' OR name='translation_history')"
+      );
+
+      if (tables.length < 2) {
+        throw Exception('필수 테이블이 존재하지 않습니다');
+      }
+
+      print('[DatabaseHelper] 데이터베이스 무결성 검증 완료');
+    } catch (e) {
+      print('[DatabaseHelper] 데이터베이스 무결성 검증 실패: $e');
+      rethrow;
+    }
   }
 
   // Settings 관련 메서드

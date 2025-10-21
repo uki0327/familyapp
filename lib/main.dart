@@ -160,10 +160,65 @@ class _LoadingScreen extends StatelessWidget {
   }
 }
 
-class _ErrorScreen extends StatelessWidget {
+class _ErrorScreen extends StatefulWidget {
   final String error;
 
   const _ErrorScreen({required this.error});
+
+  @override
+  State<_ErrorScreen> createState() => _ErrorScreenState();
+}
+
+class _ErrorScreenState extends State<_ErrorScreen> {
+  bool _isRetrying = false;
+
+  Future<void> _retryInitialization() async {
+    setState(() {
+      _isRetrying = true;
+    });
+
+    try {
+      print('[ErrorScreen] 데이터베이스 재초기화 시도');
+
+      // Reset the database instance
+      DatabaseHelper._database = null;
+
+      // Try to initialize database again
+      await DatabaseHelper().database;
+
+      print('[ErrorScreen] 데이터베이스 재초기화 성공');
+
+      if (mounted) {
+        // Navigate to main screen
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const MainMenuScreen()),
+        );
+      }
+    } catch (e) {
+      print('[ErrorScreen] 재초기화 실패: $e');
+
+      if (mounted) {
+        setState(() {
+          _isRetrying = false;
+        });
+
+        // Show error dialog
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('재시도 실패'),
+            content: Text('데이터베이스 초기화에 실패했습니다.\n\n$e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('확인'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -214,7 +269,7 @@ class _ErrorScreen extends StatelessWidget {
                     ],
                   ),
                   child: Text(
-                    error,
+                    widget.error,
                     style: const TextStyle(
                       fontSize: 14,
                       color: Colors.black87,
@@ -224,12 +279,18 @@ class _ErrorScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
-                  onPressed: () {
-                    // Restart the app
-                    print('[ErrorScreen] 앱 재시작 요청');
-                  },
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('다시 시도'),
+                  onPressed: _isRetrying ? null : _retryInitialization,
+                  icon: _isRetrying
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.refresh),
+                  label: Text(_isRetrying ? '재시도 중...' : '다시 시도'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 32,
